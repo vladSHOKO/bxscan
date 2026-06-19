@@ -21,6 +21,10 @@ type Result struct {
 	TemplatesExists     bool
 
 	Components map[string]*analyzer.Component
+
+	Modules map[string]*analyzer.Module
+
+	SecurityFindings []*analyzer.SecurityFindings
 }
 
 func (r Result) String() string {
@@ -42,6 +46,14 @@ func (r Result) String() string {
 		builder.WriteString(fmt.Sprintf("%s\n", r.Components[key].String()))
 	}
 
+	builder.WriteString(fmt.Sprintf("Modules: %d\n", len(r.Modules)))
+	keys = slices.Collect(maps.Keys(r.Modules))
+	slices.Sort(keys)
+
+	for _, key := range keys {
+		builder.WriteString(fmt.Sprintf("%s\n", r.Modules[key].String()))
+	}
+
 	return builder.String()
 }
 
@@ -55,6 +67,7 @@ func Scan(path string) (*Result, error) {
 	result := Result{
 		RootPath:   path,
 		Components: map[string]*analyzer.Component{},
+		Modules:    map[string]*analyzer.Module{},
 	}
 	err := filepath.WalkDir(path, func(currentPath string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -94,11 +107,16 @@ func Scan(path string) (*Result, error) {
 		switch section {
 		case "components":
 			result.ComponentsDirExists = true
-			analyzer.AnalyzeComponent(relPath, d, result.Components)
+			if err = analyzer.AnalyzeComponent(currentPath, relPath, d, result.Components); err != nil {
+				return err
+			}
 		case "templates":
 			result.TemplatesExists = true
 		case "modules":
 			result.ModulesExists = true
+			if err = analyzer.AnalyzeModule(relPath, d, result.Modules); err != nil {
+				return err
+			}
 		}
 
 		return nil
