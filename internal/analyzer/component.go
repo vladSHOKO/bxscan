@@ -1,16 +1,25 @@
 package analyzer
 
 import (
+	"bufio"
 	"fmt"
 	"io/fs"
+	"maps"
+	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
 	"strings"
 )
 
+const MaxTemplateLines = 500
+
 type Component struct {
-	Vendor   string
-	Name     string
-	FullName string
+	Vendor    string
+	Name      string
+	FullName  string
+	Templates map[string]*Template
 
 	ClassExists       bool
 	ComponentExists   bool
@@ -18,10 +27,18 @@ type Component struct {
 	ParametersExists  bool
 }
 
-func AnalyzeComponent(relPath string, d fs.DirEntry, componentsMap map[string]*Component) {
+type Template struct {
+	Name      string
+	RelPath   string
+	Lines     int
+	TooLarge  bool
+	SQLExists bool
+}
+
+func AnalyzeComponent(currentPath, relPath string, d fs.DirEntry, componentsMap map[string]*Component) error {
 	parts := strings.Split(relPath, string(filepath.Separator))
 	if len(parts) < 3 {
-		return
+		return nil
 	}
 
 	componentKey := filepath.Join(parts[1], parts[2])
@@ -32,31 +49,43 @@ func AnalyzeComponent(relPath string, d fs.DirEntry, componentsMap map[string]*C
 				Vendor:   parts[1],
 				Name:     parts[2],
 				FullName: componentKey,
+
+				Templates: map[string]*Template{},
 			}
 		}
 
-		return
+		return nil
 	}
 
-	if len(parts) != 4 || d.IsDir() {
-		return
+	if len(parts) == 4 && !d.IsDir() {
+		result, ok := componentsMap[componentKey]
+		if !ok {
+			return nil
+		}
+
+		switch parts[3] {
+		case "class.php":
+			result.ClassExists = true
+		case ".parameters.php":
+			result.ParametersExists = true
+		case "component.php":
+			result.ComponentExists = true
+		case ".description.php":
+			result.DescriptionExists = true
+		}
 	}
 
-	result, ok := componentsMap[componentKey]
-	if !ok {
-		return
+	if len(parts) == 6 && parts[3] == "templates" && parts[5] == "template.php" && !d.IsDir() {
+		templateKey := parts[4]
+		analyzeResult, err := AnalyzeTemplate(currentPath, relPath, parts)
+		if err != nil {
+			return err
+		}
+
+		componentsMap[componentKey].Templates[templateKey] = analyzeResult
 	}
 
-	switch parts[3] {
-	case "class.php":
-		result.ClassExists = true
-	case ".parameters.php":
-		result.ParametersExists = true
-	case "component.php":
-		result.ComponentExists = true
-	case ".description.php":
-		result.DescriptionExists = true
-	}
+	return nil
 }
 
 func (c *Component) String() string {
@@ -67,6 +96,79 @@ func (c *Component) String() string {
 	builder.WriteString(fmt.Sprintf("\tcomponent.php: %t\n", c.ComponentExists))
 	builder.WriteString(fmt.Sprintf("\t.description.php: %t\n", c.DescriptionExists))
 	builder.WriteString(fmt.Sprintf("\t.parameters.php: %t\n", c.ParametersExists))
+
+	builder.WriteString(fmt.Sprintf("\tTemplates: %d\n", len(c.Templates)))
+
+	keys := slices.Collect(maps.Keys(c.Templates))
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		builder.WriteString(fmt.Sprintf("\t%s\n", c.Templates[key].String()))
+	}
+
+	return builder.String()
+}
+
+func AnalyzeTemplate(currentPath, relPath string, parts []string) (*Template, error) {
+	var builder strings.Builder
+	result := &Template{
+		Name:    parts[4],
+		RelPath: relPath,
+	}
+
+	file, err := os.Open(currentPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		result.Lines++
+		builder.WriteString(scanner.Text())
+		builder.WriteByte('\n')
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	result.SQLExists = ContainsSQL(builder.String())
+
+	if result.Lines > MaxTemplateLines {
+		result.TooLarge = true
+	}
+
+	return result, nil
+}
+
+var sqlPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?is)\bselect\b.{1,1000}\bfrom\b`),
+	regexp.MustCompile(`(?is)\binsert\s+into\b`),
+	regexp.MustCompile(`(?is)\bupdate\b.{1,500}\bset\b`),
+	regexp.MustCompile(`(?is)\bdelete\s+from\b`),
+	regexp.MustCompile(`(?i)\$DB\s*->\s*(Query|QueryBind)\s*\(`),
+	regexp.MustCompile(`(?i)->\s*query\s*\(`),
+}
+
+func ContainsSQL(content string) bool {
+	for _, pattern := range sqlPatterns {
+		if pattern.MatchString(content) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (t *Template) String() string {
+	var builder strings.Builder
+
+	builder.WriteString(fmt.Sprintf("\t%s\n", t.Name))
+	builder.WriteString(fmt.Sprintf("\t\t\tlines: %d\n", t.Lines))
+	builder.WriteString(fmt.Sprintf("\t\t\ttoo large: %t\n", t.TooLarge))
+	builder.WriteString(fmt.Sprintf("\t\t\tsql exists: %t\n", t.SQLExists))
 
 	return builder.String()
 }
