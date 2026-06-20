@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewFullCommand() *cobra.Command {
+func NewModulesCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "full [path]",
-		Short: "Run full bitrix project analyse",
+		Use:   "modules [path]",
+		Short: "Run analysis of modules",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
@@ -20,9 +20,9 @@ func NewFullCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("Analysing Bitrix project: %s\n", path)
+			fmt.Println("Analysing modules...")
 
-			result, err := scanner.Scan(path, scanner.ScanFull)
+			result, err := scanner.Scan(path, scanner.ScanModules)
 			if err != nil {
 				return err
 			}
