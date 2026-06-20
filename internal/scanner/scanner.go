@@ -24,7 +24,7 @@ type Result struct {
 
 	Modules map[string]*analyzer.Module
 
-	SecurityFindings []*analyzer.SecurityFindings
+	SecurityFindings []analyzer.SecurityFinding
 }
 
 func (r Result) String() string {
@@ -54,20 +54,28 @@ func (r Result) String() string {
 		builder.WriteString(fmt.Sprintf("%s\n", r.Modules[key].String()))
 	}
 
+	builder.WriteString(fmt.Sprintf("Security findings: %d\n", len(r.SecurityFindings)))
+
+	for _, finding := range r.SecurityFindings {
+		builder.WriteString(fmt.Sprintf("%s\n", finding.String()))
+	}
+
 	return builder.String()
 }
 
 var targetList = map[string]struct{}{
-	"components": {},
-	"templates":  {},
-	"modules":    {},
+	"components":    {},
+	"templates":     {},
+	"modules":       {},
+	"php_interface": {},
 }
 
 func Scan(path string) (*Result, error) {
 	result := Result{
-		RootPath:   path,
-		Components: map[string]*analyzer.Component{},
-		Modules:    map[string]*analyzer.Module{},
+		RootPath:         path,
+		Components:       map[string]*analyzer.Component{},
+		Modules:          map[string]*analyzer.Module{},
+		SecurityFindings: []analyzer.SecurityFinding{},
 	}
 	err := filepath.WalkDir(path, func(currentPath string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -116,6 +124,16 @@ func Scan(path string) (*Result, error) {
 			result.ModulesExists = true
 			if err = analyzer.AnalyzeModule(relPath, d, result.Modules); err != nil {
 				return err
+			}
+		}
+
+		if !d.IsDir() && filepath.Ext(relPath) == ".php" {
+			securityAnalyzeResults, err := analyzer.AnalyzeSecurity(currentPath, relPath)
+			if err != nil {
+				return err
+			}
+			for _, securityResult := range securityAnalyzeResults {
+				result.SecurityFindings = append(result.SecurityFindings, securityResult)
 			}
 		}
 
