@@ -21,6 +21,9 @@ func NewRootCommand() *cobra.Command {
 func Execute() {
 	rootCmd := NewRootCommand()
 	rootCmd.AddCommand(NewFullCommand())
+	rootCmd.AddCommand(NewComponentsCommand())
+	rootCmd.AddCommand(NewModulesCommand())
+	rootCmd.AddCommand(NewSecurityCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
