@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 )
@@ -112,39 +112,33 @@ var targetList = map[string]struct{}{
 	"php_interface": {},
 }
 
-func Scan(path string, mod ScanMode) (*Result, error) {
+func Scan(fsys fs.FS, mod ScanMode, path string) (*Result, error) {
 	result := Result{
-		ScanMode:         mod,
 		RootPath:         path,
+		ScanMode:         mod,
 		Components:       map[string]*analyzer.Component{},
 		Modules:          map[string]*analyzer.Module{},
 		SecurityFindings: []analyzer.SecurityFinding{},
 	}
-	err := filepath.WalkDir(path, func(currentPath string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, ".", func(relPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		relPath, err := filepath.Rel(path, currentPath)
-		if err != nil {
-			return err
-		}
-
 		if relPath == "." {
 			return nil
 		}
 
-		parts := strings.Split(relPath, string(filepath.Separator))
+		parts := strings.Split(relPath, "/")
 		section := parts[0]
 
 		switch mod {
 		case ScanFull:
-			err = runFullScan(&result, d, section, relPath, currentPath)
+			err = runFullScan(&result, d, section, relPath, fsys)
 			if err != nil {
 				return err
 			}
 		case ScanComponents:
-			err = runComponentsScan(&result, d, section, relPath, currentPath)
+			err = runComponentsScan(&result, d, section, relPath, fsys)
 			if err != nil {
 				return err
 			}
@@ -154,7 +148,7 @@ func Scan(path string, mod ScanMode) (*Result, error) {
 				return err
 			}
 		case ScanSecurity:
-			err = runSecurityScan(&result, d, section, currentPath, relPath)
+			err = runSecurityScan(&result, d, section, relPath, fsys)
 			if err != nil {
 				return err
 			}
@@ -169,10 +163,10 @@ func Scan(path string, mod ScanMode) (*Result, error) {
 	return &result, nil
 }
 
-func runFullScan(result *Result, d fs.DirEntry, section, relPath, currentPath string) error {
+func runFullScan(result *Result, d fs.DirEntry, section, relPath string, fsys fs.FS) error {
 	if _, ok := targetList[section]; !ok {
 		if d.IsDir() {
-			return filepath.SkipDir
+			return fs.SkipDir
 		}
 
 		return nil
@@ -183,7 +177,7 @@ func runFullScan(result *Result, d fs.DirEntry, section, relPath, currentPath st
 	} else {
 		result.Files++
 
-		if filepath.Ext(relPath) == ".php" {
+		if path.Ext(relPath) == ".php" {
 			result.PHPFiles++
 		}
 	}
@@ -191,7 +185,7 @@ func runFullScan(result *Result, d fs.DirEntry, section, relPath, currentPath st
 	switch section {
 	case "components":
 		result.ComponentsDirExists = true
-		if err := analyzer.AnalyzeComponent(currentPath, relPath, d, result.Components); err != nil {
+		if err := analyzer.AnalyzeComponent(fsys, relPath, d, result.Components); err != nil {
 			return err
 		}
 	case "templates":
@@ -203,8 +197,8 @@ func runFullScan(result *Result, d fs.DirEntry, section, relPath, currentPath st
 		}
 	}
 
-	if !d.IsDir() && filepath.Ext(relPath) == ".php" {
-		securityAnalyzeResults, err := analyzer.AnalyzeSecurity(currentPath, relPath)
+	if !d.IsDir() && path.Ext(relPath) == ".php" {
+		securityAnalyzeResults, err := analyzer.AnalyzeSecurity(fsys, relPath)
 		if err != nil {
 			return err
 		}
@@ -216,15 +210,15 @@ func runFullScan(result *Result, d fs.DirEntry, section, relPath, currentPath st
 	return nil
 }
 
-func runComponentsScan(result *Result, d fs.DirEntry, section, relPath, currentPath string) error {
+func runComponentsScan(result *Result, d fs.DirEntry, section, relPath string, fsys fs.FS) error {
 	if section != "components" {
 		if d.IsDir() {
-			return filepath.SkipDir
+			return fs.SkipDir
 		}
 		return nil
 	}
 
-	if err := analyzer.AnalyzeComponent(currentPath, relPath, d, result.Components); err != nil {
+	if err := analyzer.AnalyzeComponent(fsys, relPath, d, result.Components); err != nil {
 		return err
 	}
 
@@ -234,7 +228,7 @@ func runComponentsScan(result *Result, d fs.DirEntry, section, relPath, currentP
 func runModulesScan(result *Result, d fs.DirEntry, section, relPath string) error {
 	if section != "modules" {
 		if d.IsDir() {
-			return filepath.SkipDir
+			return fs.SkipDir
 		}
 		return nil
 	}
@@ -246,17 +240,17 @@ func runModulesScan(result *Result, d fs.DirEntry, section, relPath string) erro
 	return nil
 }
 
-func runSecurityScan(result *Result, d fs.DirEntry, section, currentPath, relPath string) error {
+func runSecurityScan(result *Result, d fs.DirEntry, section, relPath string, fsys fs.FS) error {
 	if _, ok := targetList[section]; !ok {
 		if d.IsDir() {
-			return filepath.SkipDir
+			return fs.SkipDir
 		}
 
 		return nil
 	}
 
-	if !d.IsDir() && filepath.Ext(relPath) == ".php" {
-		securityAnalyzeResults, err := analyzer.AnalyzeSecurity(currentPath, relPath)
+	if !d.IsDir() && path.Ext(relPath) == ".php" {
+		securityAnalyzeResults, err := analyzer.AnalyzeSecurity(fsys, relPath)
 		if err != nil {
 			return err
 		}

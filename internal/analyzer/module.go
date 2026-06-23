@@ -3,7 +3,6 @@ package analyzer
 import (
 	"fmt"
 	"io/fs"
-	"path/filepath"
 	"strings"
 )
 
@@ -28,7 +27,7 @@ func (m *Module) String() string {
 }
 
 func AnalyzeModule(relPath string, d fs.DirEntry, modulesMap map[string]*Module) error {
-	parts := strings.Split(relPath, string(filepath.Separator))
+	parts := strings.Split(relPath, "/")
 
 	if len(parts) < 2 {
 		return nil
