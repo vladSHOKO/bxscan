@@ -1,10 +1,9 @@
 package analyzer
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestContainsSQL(t *testing.T) {
@@ -89,7 +88,11 @@ func TestAnalyzeTemplate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			path := writeTemplateFile(t, test.content)
+			fsys := fstest.MapFS{
+				"components/acme/news/templates/.default/template.php": {
+					Data: []byte(test.content),
+				},
+			}
 
 			parts := []string{
 				"components",
@@ -101,9 +104,9 @@ func TestAnalyzeTemplate(t *testing.T) {
 			}
 
 			result, err := AnalyzeTemplate(
-				path,
 				"components/acme/news/templates/.default/template.php",
 				parts,
+				fsys,
 			)
 
 			if err != nil {
@@ -119,17 +122,4 @@ func TestAnalyzeTemplate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func writeTemplateFile(t *testing.T, content string) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "template.php")
-
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("failed to write file: %s", path)
-	}
-
-	return path
 }

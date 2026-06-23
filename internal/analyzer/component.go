@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -35,13 +34,13 @@ type Template struct {
 	SQLExists bool
 }
 
-func AnalyzeComponent(currentPath, relPath string, d fs.DirEntry, componentsMap map[string]*Component) error {
-	parts := strings.Split(relPath, string(filepath.Separator))
+func AnalyzeComponent(fsys fs.FS, relPath string, d fs.DirEntry, componentsMap map[string]*Component) error {
+	parts := strings.Split(relPath, "/")
 	if len(parts) < 3 {
 		return nil
 	}
 
-	componentKey := filepath.Join(parts[1], parts[2])
+	componentKey := path.Join(parts[1], parts[2])
 
 	if len(parts) == 3 && d.IsDir() {
 		if _, ok := componentsMap[componentKey]; !ok {
@@ -77,7 +76,7 @@ func AnalyzeComponent(currentPath, relPath string, d fs.DirEntry, componentsMap 
 
 	if len(parts) == 6 && parts[3] == "templates" && parts[5] == "template.php" && !d.IsDir() {
 		templateKey := parts[4]
-		analyzeResult, err := AnalyzeTemplate(currentPath, relPath, parts)
+		analyzeResult, err := AnalyzeTemplate(relPath, parts, fsys)
 		if err != nil {
 			return err
 		}
@@ -109,14 +108,14 @@ func (c *Component) String() string {
 	return builder.String()
 }
 
-func AnalyzeTemplate(currentPath, relPath string, parts []string) (*Template, error) {
+func AnalyzeTemplate(relPath string, parts []string, fsys fs.FS) (*Template, error) {
 	var builder strings.Builder
 	result := &Template{
 		Name:    parts[4],
 		RelPath: relPath,
 	}
 
-	file, err := os.Open(currentPath)
+	file, err := fsys.Open(relPath)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bxscan/internal/scanner"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -22,7 +23,7 @@ func NewSecurityCommand() *cobra.Command {
 
 			fmt.Println("Analysing security...")
 
-			result, err := scanner.Scan(path, scanner.ScanSecurity)
+			result, err := scanner.Scan(os.DirFS(path), scanner.ScanSecurity, path)
 			if err != nil {
 				return err
 			}

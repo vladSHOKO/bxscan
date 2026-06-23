@@ -3,7 +3,7 @@ package analyzer
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"io/fs"
 	"regexp"
 	"strings"
 )
@@ -53,12 +53,12 @@ var securityPatterns = []SecurityPattern{
 	},
 }
 
-func AnalyzeSecurity(currentPath, relPath string) ([]SecurityFinding, error) {
+func AnalyzeSecurity(fsys fs.FS, relPath string) ([]SecurityFinding, error) {
 	var securityFindings []SecurityFinding
 
-	file, err := os.Open(currentPath)
+	file, err := fsys.Open(relPath)
 	if err != nil {
-		return securityFindings, fmt.Errorf("failed to open file %s. %w", currentPath, err)
+		return securityFindings, fmt.Errorf("failed to open file %s. %w", relPath, err)
 	}
 	defer file.Close()
 
@@ -81,7 +81,7 @@ func AnalyzeSecurity(currentPath, relPath string) ([]SecurityFinding, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return securityFindings, fmt.Errorf("failed to scan file %s. %w", currentPath, err)
+		return securityFindings, fmt.Errorf("failed to scan file %s. %w", relPath, err)
 	}
 
 	return securityFindings, nil

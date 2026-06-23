@@ -3,6 +3,7 @@ package cmd
 import (
 	"bxscan/internal/scanner"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -22,7 +23,7 @@ func NewFullCommand() *cobra.Command {
 
 			fmt.Printf("Analysing Bitrix project: %s\n", path)
 
-			result, err := scanner.Scan(path, scanner.ScanFull)
+			result, err := scanner.Scan(os.DirFS(path), scanner.ScanFull, path)
 			if err != nil {
 				return err
 			}

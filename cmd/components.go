@@ -3,6 +3,7 @@ package cmd
 import (
 	"bxscan/internal/scanner"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -22,7 +23,7 @@ func NewComponentsCommand() *cobra.Command {
 
 			fmt.Println("Analysing components...")
 
-			result, err := scanner.Scan(path, scanner.ScanComponents)
+			result, err := scanner.Scan(os.DirFS(path), scanner.ScanComponents, path)
 			if err != nil {
 				return err
 			}
